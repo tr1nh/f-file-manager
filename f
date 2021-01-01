@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMD_LIST="ls -a -1"
+CMD_LIST="ls -a -F -1"
 SELECTED_PATH=~/.f-selected
 
 _clean() {
@@ -16,7 +16,7 @@ _clear() {
 trap _clean EXIT
 
 _input() {
-  read -e -p "$(pwd) (Type ? for help): " -i "$input" input
+  read -e -p "> " -i "$input" input
   case "$input" in
     ..)
       cd ..
@@ -34,26 +34,44 @@ _input() {
       bash
       _output
       ;;
+    ,\ *)
+      path=${input:2}
+      _commacd_forward $path
+      _output
+      ;;
     \?)
       _clear
+      echo "Help: "
       echo ""
-      echo "type something to find and change directory"
-      echo "/ - change current directory to root"
-      echo "~ - change current directory to home"
-      echo "! - shell"
-      echo "? - show shortcut"
-      echo "/a - show all selected"
-      echo "/c - change directory"
-      echo "/d - delete selected"
-      echo "/e - execute command, can use with %s and /index"
-      echo "/h - toggle hide/unhide dotfiles"
-      echo "/s - select items by index"
+      echo "Type something to find and change directory"
+      echo "Type an index of folder to open it"
+      echo ""
+      echo "Shortcuts:"
+      echo ""
+      echo "/  - Change current directory to root"
+      echo "~  - Change current directory to home"
+      echo "!  - Shell"
+      echo "?  - Show help"
+      echo "/a - Show all selected"
+      echo "/c - Change directory"
+      echo "/d - Delete selected"
+      echo "/e - Execute command, can use with %s and /index"
+      echo "/h - Toggle hide/unhide dotfiles"
+      echo "/l - Execute command and show output"
+      echo "/s - Select items by index"
+      echo ""
+      echo "Extends scripts:"
+      echo ""
+      echo ",  - Change directory with commacd"
+      echo "/b - List bookmark with bash-bookmark"
+      echo "/g - Go a bookmark with bash-bookmark"
       echo ""
       input=""
       _input
       ;;
     /a)
       _clear
+      echo "Selected items: "
       echo ""
       if [ -f $SELECTED_PATH ]; then
         awk '{print NR,$0}' $SELECTED_PATH
@@ -66,6 +84,7 @@ _input() {
       ;;
     /b)
       _clear
+      echo "Bookmarks: "
       echo ""
       _bm_list
       echo ""
@@ -77,36 +96,6 @@ _input() {
       cd "$path"
       _output
       ;;
-    /g\ *)
-      _bm_change_directory ${input:3}
-      _output
-      ;;
-    .|/h)
-      if [[ $CMD_LIST =~ \ \-a ]]; then
-        CMD_LIST="ls -1"
-      else
-        CMD_LIST="ls -a -1"
-      fi
-      _output
-      ;;
-    /e\ *)
-      raw_cmd=${input:3}
-      if [[ $raw_cmd =~ \ %s ]]; then
-        params=$(cat $SELECTED_PATH | tr '\n' ' ')
-        cmd=$(echo $raw_cmd | sed "s;%s;$params;")
-      elif [[ $raw_cmd =~ \ /[0-9] ]]; then
-        cmd=$(echo $raw_cmd | sed 's/\/\([0-9]\+\)/${items[\1]}/g')
-      else
-        cmd=$raw_cmd
-      fi
-      eval $cmd
-      rm $SELECTED_PATH
-      _output
-      ;;
-    /q)
-      _clear
-      exit 0
-      ;;
     /d\ *)
       _clear
       selected=$(echo ${input:3} | sed 's/\ /d;/g')
@@ -115,11 +104,40 @@ _input() {
       input=""
       _input
       ;;
+    /e\ *)
+      raw_cmd=${input:3}
+      _command
+      eval "$cmd"
+      _output
+      ;;
+    /g\ *)
+      _bm_change_directory ${input:3}
+      _output
+      ;;
+    .|/h)
+      if [[ $CMD_LIST =~ \ \-a ]]; then
+        CMD_LIST="ls -F -1"
+      else
+        CMD_LIST="ls -F -a -1"
+      fi
+      _output
+      ;;
+    /l\ *)
+      raw_cmd=${input:3}
+      _command
+      eval "$cmd | less"
+      _output
+      ;;
+    /q)
+      _clear
+      exit 0
+      ;;
     /s\ *)
       raw_input=${input:3}
       IFS=' ' read -p "Select:" -r -a selected <<< "$raw_input"
       for i in ${selected[@]}; do
-        echo "\"$(pwd)/${items[$i]}\"" >> $SELECTED_PATH
+        match=$(_index_of $i)
+        echo "\"$match\"" >> $SELECTED_PATH
       done
       sort -u $SELECTED_PATH -o $SELECTED_PATH
       _output
@@ -127,7 +145,7 @@ _input() {
     *)
       digit_pattern='^[0-9]+$'
       if [[ "$input" =~ $digit_pattern ]]; then
-        cd ${items[$input]}
+        cd "$(_index_of $input)"
         _output
       else
         _output $input
@@ -136,42 +154,48 @@ _input() {
   esac
 }
 
-_search() {
-  if [ -z $1 ]; then
-    items=($($CMD_LIST))
-  else
-    items=($($CMD_LIST | grep -i $1))
-  fi
-  if [[ ${#items[@]} -eq 1 && -d ${items[0]} ]]; then
-    input=""
-    cd ${items[0]}
-    _output
-  fi
+_index_of() {
+  echo $(pwd)/$(eval "$CMD_LIST | sed 's/\ -F//' | sed -n '$1p'")
 }
 
 _output() {
-  _search $1
-  index=0
-  output=""
   input=""
-  for item in ${items[@]}; do
-    if [ -d $item ]; then
-      output+="$index - $item/\n"
-    elif [ -f $item ]; then
-      output+="$index - $item\n"
-    fi
-    let "index++"
-  done
   _clear
+  pwd
   echo ""
-  echo -e $output | column
+  cmd="$CMD_LIST | awk '/$1/{ print NR,\$0}'"
+  match_count=$(eval $cmd | wc -l)
+  if [ $match_count -eq 1 ]; then
+    match_index=$(eval $cmd | cut -d ' ' -f 1)
+    match=$(_index_of $match_index)
+    if [ -d "$match" ]; then
+      cd "$match"
+      _output
+    fi
+  elif [ $match_count -eq 0 ]; then
+    echo "Type ? for help"
+  fi
+  eval $cmd | column
   echo ""
   _input
 }
 
-# bookmark manager
+_command() {
+  if [[ $raw_cmd =~ \ %s ]]; then
+    params=$(cat $SELECTED_PATH | tr '\n' ' ')
+    cmd=$(echo $raw_cmd | sed "s;%s;$params;")
+    rm $SELECTED_PATH
+  elif [[ $raw_cmd =~ \ /[0-9] ]]; then
+    cmd=$(echo $raw_cmd | sed 's/\/\([0-9]\+\)/$(_index_of\ \1)/g')
+  else
+    cmd=$raw_cmd
+  fi
+}
+
+# extend with other scripts
 shopt -s expand_aliases
 source ~/.bash_extensions/bookmark.sh
+source ~/.bash_extensions/commacd.sh
 
 cd $1
 _output
