@@ -155,7 +155,8 @@ _input() {
 }
 
 _index_of() {
-  echo $(pwd)/$(eval "$CMD_LIST | sed 's/\ -F//' | sed -n '$1p'")
+  cmd=$(echo $CMD_LIST | sed 's/\ -F//')
+  echo $(pwd)/$(eval "$cmd | sed -n '$1p'")
 }
 
 _output() {
