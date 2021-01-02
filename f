@@ -57,7 +57,7 @@ _input() {
       echo "/d - Delete selected"
       echo "/e - Execute command, can use with %s and /index"
       echo "/h - Toggle hide/unhide dotfiles"
-      echo "/l - Execute command and show output"
+      echo "/i - Execute command in silent"
       echo "/s - Select items by index"
       echo ""
       echo "Extends scripts:"
@@ -107,7 +107,10 @@ _input() {
     /e\ *)
       raw_cmd=${input:3}
       _command
+      echo ""
       eval "$cmd"
+      echo ""
+      read -n 1 -s -r -p "Press any key to continue..."
       _output
       ;;
     /g\ *)
@@ -122,10 +125,10 @@ _input() {
       fi
       _output
       ;;
-    /l\ *)
+    /i\ *)
       raw_cmd=${input:3}
       _command
-      eval "$cmd | less"
+      eval "$cmd"
       _output
       ;;
     /q)
@@ -164,7 +167,7 @@ _output() {
   _clear
   pwd
   echo ""
-  cmd="$CMD_LIST | awk '/$1/{ print NR,\$0}'"
+  cmd="$CMD_LIST | awk 'tolower(\$0) ~ /$1/{ print NR,\$0}'"
   match_count=$(eval $cmd | wc -l)
   if [ $match_count -eq 1 ]; then
     match_index=$(eval $cmd | cut -d ' ' -f 1)
