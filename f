@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CMD_LIST="ls -a -F -1"
+CMD_LIST="ls -F -1"
 SELECTED_PATH=~/.f-selected
 
 _clean() {
@@ -20,6 +20,7 @@ _input() {
   case "$input" in
     ..)
       cd ..
+      goParent=0
       _output
       ;;
     "~")
@@ -165,11 +166,11 @@ _index_of() {
 _output() {
   input=""
   _clear
-  pwd
+  pwd | sed 's/\/\//\//'
   echo ""
   cmd="$CMD_LIST | awk 'tolower(\$0) ~ /$1/{ print NR,\$0}'"
   match_count=$(eval $cmd | wc -l)
-  if [ $match_count -eq 1 ]; then
+  if [[ $match_count -eq 1 && $goParent -eq 1 ]]; then
     match_index=$(eval $cmd | cut -d ' ' -f 1)
     match=$(_index_of $match_index)
     if [ -d "$match" ]; then
@@ -181,6 +182,7 @@ _output() {
   fi
   eval $cmd | column
   echo ""
+  goParent=1
   _input
 }
 
@@ -201,6 +203,9 @@ shopt -s expand_aliases
 source ~/.bash_extensions/bookmark.sh
 source ~/.bash_extensions/commacd.sh
 
-cd $1
+if [ ! -z $1 ]; then
+  cd $1
+fi
+
 _output
 
